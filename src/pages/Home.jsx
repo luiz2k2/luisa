@@ -1,13 +1,15 @@
 import HomeHero from "../components/HomeHero";
 import CategoryTabs from "../components/CategoryTabs";
 import ServicesGrid from "../components/ServicesGrid";
+import SalonShowcase from "../components/SalonShowcase";
+import SalonInfo from "../components/SalonInfo";
 import CartSidebar from "../components/CartSidebar";
 import ToastStack from "../components/ToastStack";
 import "../styles/Home.css";
 import useSalonScheduling from "../hooks/useSalonScheduling";
 import { categories, categoryNames, products } from "../data/salonData";
 
-export default function Home({ setPage }) {
+export default function Home() {
   const {
     agendamentos,
     addToCart,
@@ -32,7 +34,6 @@ export default function Home({ setPage }) {
     setIsHistoryOpen,
     toasts,
     updateAppointment,
-    updateQuantity,
     requestCancelAppointment,
   } = useSalonScheduling(products);
 
@@ -42,7 +43,6 @@ export default function Home({ setPage }) {
         cartCount={cartCount}
         hideBadgeUntilNextAdd={hideBadgeUntilNextAdd}
         isHistoryOpen={isHistoryOpen}
-        onGoContact={() => setPage("contact")}
         onToggleHistory={() => setIsHistoryOpen((prev) => !prev)}
         onOpenCart={() => setIsCartOpen(true)}
       />
@@ -61,13 +61,16 @@ export default function Home({ setPage }) {
         onAddToCart={addToCart}
       />
 
+      <SalonInfo />
+      <SalonShowcase />
+
       <CartSidebar
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         agendamentos={agendamentos}
         historicoAgendamentos={historicoAgendamentos}
+        products={products}
         formatBRL={(value) => `R$ ${value.toFixed(2).replace(".", ",")}`}
-        onUpdateQuantity={updateQuantity}
         onRemoveFromCart={removeFromCart}
         onCancelAppointment={requestCancelAppointment}
         appointmentToCancel={appointmentToCancel}
@@ -78,6 +81,11 @@ export default function Home({ setPage }) {
         confirmedCount={confirmedCount}
         onFinalizeScheduling={finalizeScheduling}
         lastConfirmation={lastConfirmation}
+        onOpenWhatsApp={() => {
+          const phone = "5519993895612";
+          const message = encodeURIComponent(lastConfirmation?.whatsappMessage || "");
+          window.open(`https://wa.me/${phone}?text=${message}`, "_blank", "noopener,noreferrer");
+        }}
         onCloseConfirmation={() => setLastConfirmation(null)}
       />
 

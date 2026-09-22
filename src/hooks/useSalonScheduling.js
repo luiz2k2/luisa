@@ -11,19 +11,18 @@ function getToday() {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
-function readLocalStorage(key) {
-  try {
-    return JSON.parse(localStorage.getItem(key) || "[]");
-  } catch {
-    return [];
-  }
+function getFirstAvailableDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 export default function useSalonScheduling(products) {
-  const [agendamentos, setAgendamentos] = useState(() => readLocalStorage("agendamentos"));
-  const [historicoAgendamentos, setHistoricoAgendamentos] = useState(() =>
-    readLocalStorage("historicoAgendamentos")
-  );
+  const [agendamentos, setAgendamentos] = useState([]);
+  const [historicoAgendamentos, setHistoricoAgendamentos] = useState([]);
   const [currentCategory, setCurrentCategory] = useState("all");
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -38,31 +37,25 @@ export default function useSalonScheduling(products) {
   }, [currentCategory, products]);
 
   const cartCount = useMemo(
-    () => agendamentos.reduce((sum, item) => sum + Number(item.quantity || 1), 0),
+    () => agendamentos.length,
     [agendamentos]
   );
 
   const cartTotal = useMemo(
-    () => agendamentos.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    () => agendamentos.reduce((sum, item) => sum + item.price, 0),
     [agendamentos]
   );
 
   const confirmedCount = useMemo(
     () =>
-      historicoAgendamentos.reduce(
-        (total, item) => total + Math.max(1, Number(item.quantity) || 1),
-        0
-      ),
+      historicoAgendamentos.length,
     [historicoAgendamentos]
   );
 
   useEffect(() => {
-    localStorage.setItem("agendamentos", JSON.stringify(agendamentos));
-  }, [agendamentos]);
-
-  useEffect(() => {
-    localStorage.setItem("historicoAgendamentos", JSON.stringify(historicoAgendamentos));
-  }, [historicoAgendamentos]);
+    localStorage.removeItem("agendamentos");
+    localStorage.removeItem("historicoAgendamentos");
+  }, []);
 
   const showToast = (message, type = "success") => {
     const id = makeLocalId();
@@ -80,39 +73,27 @@ export default function useSalonScheduling(products) {
       return;
     }
 
+    if (agendamentos.some((item) => item.product_id === product.id)) {
+      showToast("Esse serviço já foi adicionado", "error");
+      return;
+    }
+
     setAgendamentos((prev) => [
       ...prev,
       {
         __backendId: makeLocalId(),
         product_id: product.id,
         product_name: product.name,
-        quantity: 1,
         price: product.price,
-        appointment_date: getToday(),
+        product_image: product.image,
+        product_duration: product.duration,
+        appointment_date: getFirstAvailableDate(),
         appointment_time: "",
         added_at: new Date().toISOString(),
       },
     ]);
     showToast(`${product.name} agendado!`, "success");
 
-  };
-
-  const updateQuantity = (itemId, delta) => {
-    const target = agendamentos.find((item) => item.__backendId === itemId);
-    if (!target) return;
-
-    const nextQuantity = target.quantity + delta;
-    if (nextQuantity <= 0) {
-      removeFromCart(itemId);
-      return;
-    }
-
-    setAgendamentos((prev) =>
-      prev.map((item) => {
-        if (item.__backendId !== itemId) return item;
-        return { ...item, quantity: nextQuantity };
-      })
-    );
   };
 
   const removeFromCart = (itemId) => {
@@ -145,7 +126,13 @@ export default function useSalonScheduling(products) {
     showToast("Agendamento cancelado", "success");
   };
 
-  const finalizeScheduling = () => {
+  const finalizeScheduling = (customer) => {
+    const phoneDigits = customer.phone.replace(/\D/g, "");
+
+    if (!customer.name.trim() || phoneDigits.length < 10) {
+      showToast("Informe seu nome e WhatsApp para finalizar", "error");
+      return;
+    }
     const missingSchedule = agendamentos.some(
       (item) => !item.appointment_date || !item.appointment_time
     );
@@ -168,20 +155,36 @@ export default function useSalonScheduling(products) {
       return;
     }
 
-    const novosAgendamentos = agendamentos.flatMap((item) =>
-      Array.from({ length: Number(item.quantity) || 1 }, () => ({
-        ...item,
-        __backendId: makeLocalId(),
-        quantity: 1,
-        status: "confirmado",
-      }))
-    );
+    const novosAgendamentos = agendamentos.map((item) => ({
+      ...item,
+      __backendId: makeLocalId(),
+      status: "confirmado",
+      customer_name: customer.name.trim(),
+      customer_phone: phoneDigits,
+    }));
+
+    const whatsappMessage = [
+      "Olá! Gostaria de confirmar meu agendamento na R.tual Hair Care.",
+      "",
+      `Cliente: ${customer.name.trim()}`,
+      `WhatsApp: ${customer.phone.trim()}`,
+      "",
+      "Serviços:",
+      ...novosAgendamentos.map(
+        (item) =>
+          `- ${item.product_name}: ${new Date(`${item.appointment_date}T12:00:00`).toLocaleDateString("pt-BR")} às ${item.appointment_time} - R$ ${item.price.toFixed(2).replace(".", ",")}`
+      ),
+      "",
+      `Total: R$ ${cartTotal.toFixed(2).replace(".", ",")}`,
+    ].join("\n");
 
     setHistoricoAgendamentos((prev) => [...novosAgendamentos, ...prev]);
     setLastConfirmation({
       appointments: novosAgendamentos,
-      total: agendamentos.reduce((sum, item) => sum + item.price, 0),
+      total: cartTotal,
+      whatsappMessage,
     });
+
     setAgendamentos([]);
     setHideBadgeUntilNextAdd(true);
     showToast("Agendamento finalizado com sucesso!", "success");
@@ -214,6 +217,5 @@ export default function useSalonScheduling(products) {
     requestCancelAppointment,
     toasts,
     updateAppointment,
-    updateQuantity,
   };
 }

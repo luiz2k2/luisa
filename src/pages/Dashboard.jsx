@@ -17,8 +17,7 @@ export default function Dashboard() {
           <span className="tag">Controle do salão</span>
           <h1>Visão geral</h1>
           <p>
-            Painel simples para acompanhar movimentos, serviços e organização
-            do salão.
+            Acompanhe a rotina, os serviços e a organização do salão.
           </p>
         </header>
 

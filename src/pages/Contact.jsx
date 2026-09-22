@@ -35,8 +35,8 @@ export default function Contact({ setPage }) {
           </h1>
 
           <p>
-            Esta área apresenta os canais de atendimento do salão, para tirar
-            dúvidas, solicitar informações e combinar seu próximo atendimento.
+            Encontre nossos canais de atendimento e escolha a melhor forma de
+            falar com a equipe.
           </p>
 
           <div className="contact-actions">
@@ -69,8 +69,7 @@ export default function Contact({ setPage }) {
           <span className="tag">Fale conosco</span>
           <h2>Envie uma mensagem</h2>
           <p>
-            Preencha os campos abaixo para simular o contato do salão. O
-            formulário é visual por enquanto.
+            Deixe seus dados e conte como podemos ajudar no seu próximo atendimento.
           </p>
         </div>
 
@@ -134,7 +133,7 @@ export default function Contact({ setPage }) {
           >
             <h3>Canais de atendimento</h3>
             <p>
-              Use esta área para mostrar os contatos principais do salão.
+              Estamos prontos para orientar você sobre serviços, horários e cuidados.
             </p>
 
             <div className="contact-info-list">

@@ -3,6 +3,13 @@
 :root {
   --black: #000000;
   --white: #ffffff;
+  --ink: #171114;
+  --plum: #3b1f35;
+  --plum-light: #6f3e61;
+  --gold: #c89b5c;
+  --rose: #f4e7e4;
+  --button-gradient: linear-gradient(135deg, #252321 0%, #4a4239 100%);
+  --button-gradient-hover: linear-gradient(135deg, #302d2a 0%, #5b5044 100%);
   --stone-50: #fafaf9;
   --stone-100: #f5f5f4;
   --stone-200: #e7e5e4;
@@ -28,7 +35,7 @@ body,
 
 body {
   margin: 0;
-  background: var(--white);
+  background: #fbf8f6;
   color: var(--stone-800);
 }
 

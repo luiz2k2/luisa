@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 function getToday() {
   const today = new Date();
   const month = String(today.getMonth() + 1).padStart(2, "0");
@@ -5,37 +7,55 @@ function getToday() {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
-function getAvailableTimes(items, currentItem) {
-  const occupiedTimes = items
-    .filter(
-      (item) =>
-        item.__backendId !== currentItem.__backendId &&
-        item.appointment_date === currentItem.appointment_date &&
-        item.appointment_time
-    )
-    .map((item) => item.appointment_time);
+function durationToMinutes(duration) {
+  const hours = Number(duration?.match(/(\d+)\s*h/)?.[1] || 0);
+  const minutes = Number(duration?.match(/(\d+)\s*min/)?.[1] || 0);
+  return Math.max(30, hours * 60 + minutes);
+}
 
-  const times = Array.from({ length: 16 }, (_, index) => {
-    const totalMinutes = 9 * 60 + index * 30;
-    const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
-    const minutes = String(totalMinutes % 60).padStart(2, "0");
-    return `${hours}:${minutes}`;
-  });
+function getAvailableTimesByDuration(items, currentItem, products) {
+  const openingMinutes = 9 * 60;
+  const closingMinutes = 18 * 60;
+  const getItemDuration = (item) =>
+    durationToMinutes(
+      item.product_duration ||
+        products.find((product) => product.id === item.product_id)?.duration
+    );
 
+  const currentDuration = getItemDuration(currentItem);
+  const sameDayItems = items.filter(
+    (item) =>
+      item.__backendId !== currentItem.__backendId &&
+      item.appointment_date === currentItem.appointment_date &&
+      item.appointment_time
+  );
   const now = new Date();
   const today = getToday();
 
-  return times.filter((time) => {
-    const [hours, minutes] = time.split(":").map(Number);
-    const isPast =
-      currentItem.appointment_date === today &&
-      hours * 60 + minutes <= now.getHours() * 60 + now.getMinutes();
+  return Array.from(
+    { length: (closingMinutes - openingMinutes) / 30 + 1 },
+    (_, index) => openingMinutes + index * 30
+  )
+    .filter((start) => {
+      const end = start + currentDuration;
+      const isPast =
+        currentItem.appointment_date === today &&
+        start <= now.getHours() * 60 + now.getMinutes();
 
-    return (
-      time === currentItem.appointment_time ||
-      (!isPast && !occupiedTimes.includes(time))
-    );
-  });
+        if (start === timeToMinutes(currentItem.appointment_time)) return true;
+        if (isPast || end > closingMinutes) return false;
+
+      return sameDayItems.every((item) => {
+        const [hours, minutes] = item.appointment_time.split(":").map(Number);
+        const itemStart = hours * 60 + minutes;
+        const itemEnd = itemStart + getItemDuration(item);
+        return end <= itemStart || start >= itemEnd;
+      });
+    })
+    .map((minutes) => {
+      const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
+      return `${hours}:${String(minutes % 60).padStart(2, "0")}`;
+    });
 }
 
 export default function CartSidebar({
@@ -43,9 +63,9 @@ export default function CartSidebar({
   onClose,
   agendamentos,
   historicoAgendamentos,
+  products,
   confirmedCount,
   formatBRL,
-  onUpdateQuantity,
   onRemoveFromCart,
   onCancelAppointment,
   appointmentToCancel,
@@ -55,8 +75,19 @@ export default function CartSidebar({
   cartTotal,
   onFinalizeScheduling,
   lastConfirmation,
+  onOpenWhatsApp,
   onCloseConfirmation,
 }) {
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) {
+      setCustomerName("");
+      setCustomerPhone("");
+    }
+  }, [isOpen]);
+
   return (
     <>
       <div className={isOpen ? "cart-overlay show" : "cart-overlay"} onClick={onClose} />
@@ -76,10 +107,14 @@ export default function CartSidebar({
 
           {agendamentos.map((item) => {
             const scheduledItems = [...agendamentos, ...historicoAgendamentos];
+            const productImage = item.product_image || products.find((product) => product.id === item.product_id)?.image;
+            const availableTimes = getAvailableTimesByDuration(scheduledItems, item, products);
 
             return (
             <div className="cart-item" key={item.__backendId}>
-              <div className="cart-thumb">✦</div>
+              <div className="cart-thumb">
+                <img src={productImage} alt={`Foto do serviço ${item.product_name}`} />
+              </div>
               <div className="cart-info">
                 <h4>{item.product_name}</h4>
                 <p>{formatBRL(item.price)} cada</p>
@@ -90,9 +125,10 @@ export default function CartSidebar({
                       type="date"
                       min={getToday()}
                       value={item.appointment_date || ""}
-                      onChange={(event) =>
-                        onUpdateAppointment(item.__backendId, "appointment_date", event.target.value)
-                      }
+                      onChange={(event) => {
+                        onUpdateAppointment(item.__backendId, "appointment_date", event.target.value);
+                        onUpdateAppointment(item.__backendId, "appointment_time", "");
+                      }}
                     />
                   </label>
                   <label>
@@ -103,25 +139,16 @@ export default function CartSidebar({
                         onUpdateAppointment(item.__backendId, "appointment_time", event.target.value)
                       }
                     >
-                      <option value=""></option>
-                      {getAvailableTimes(scheduledItems, item).map((time) => (
+                      <option value="">Selecione um horário</option>
+                      {availableTimes.map((time) => (
                         <option key={time} value={time}>{time}</option>
                       ))}
                     </select>
                   </label>
                 </div>
-                <div className="quantity-controls">
-                  <button onClick={() => onUpdateQuantity(item.__backendId, -1)} type="button">
-                    -
-                  </button>
-                  <span>{item.quantity}</span>
-                  <button onClick={() => onUpdateQuantity(item.__backendId, 1)} type="button">
-                    +
-                  </button>
-                </div>
               </div>
               <div className="cart-actions">
-                <strong>{formatBRL(item.price * item.quantity)}</strong>
+                <strong>{formatBRL(item.price)}</strong>
                 <button className="remove-btn" onClick={() => onRemoveFromCart(item.__backendId)} type="button">
                   Cancelar
                 </button>
@@ -142,7 +169,7 @@ export default function CartSidebar({
                   <span>
                     {new Date(`${item.appointment_date}T12:00:00`).toLocaleDateString("pt-BR")} às {item.appointment_time}
                   </span>
-                  <small>Confirmado</small>
+                  <small>Confirmacao recebida pelo WhatsApp.</small>
                     <button
                     className="cancel-appointment-btn"
                     onClick={() => onCancelAppointment(item.__backendId)}
@@ -158,11 +185,32 @@ export default function CartSidebar({
 
         {agendamentos.length > 0 && (
           <div className="cart-footer">
+            <div className="customer-fields">
+              <label>
+                Seu nome
+                <input
+                  value={customerName}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                  placeholder="Digite seu nome"
+                  type="text"
+                />
+              </label>
+              <label>
+                WhatsApp
+                <input
+                  value={customerPhone}
+                  onChange={(event) => setCustomerPhone(event.target.value)}
+                  placeholder="(00) 00000-0000"
+                  inputMode="tel"
+                  type="tel"
+                />
+              </label>
+            </div>
             <div className="cart-total">
               <span>Total:</span>
               <strong>{formatBRL(cartTotal)}</strong>
             </div>
-            <button className="checkout-btn" onClick={onFinalizeScheduling} type="button">
+            <button className="checkout-btn" onClick={() => onFinalizeScheduling({ name: customerName, phone: customerPhone })} type="button">
               Finalizar Agendamento
             </button>
           </div>
@@ -177,8 +225,8 @@ export default function CartSidebar({
             <h2 id="confirmation-title">Agendamento confirmado</h2>
             <p className="confirmation-copy">
               {lastConfirmation.appointments.length === 1
-                ? "Seu horário foi reservado com sucesso."
-                : `${lastConfirmation.appointments.length} horários foram reservados com sucesso.`}
+                ? "Seu horário foi reservado com sucesso. Recebemos sua confirmação pelo WhatsApp."
+                : `${lastConfirmation.appointments.length} horários foram reservados com sucesso. Recebemos sua confirmação pelo WhatsApp.`}
             </p>
             <div className="confirmation-list">
               {lastConfirmation.appointments.map((item) => (
@@ -190,9 +238,14 @@ export default function CartSidebar({
                 </div>
               ))}
             </div>
-            <button className="confirmation-close" onClick={onCloseConfirmation} type="button">
-              Entendi
-            </button>
+            <div className="confirmation-actions">
+              <button className="confirmation-whatsapp" onClick={onOpenWhatsApp} type="button">
+                Enviar pelo WhatsApp
+              </button>
+              <button className="confirmation-close" onClick={onCloseConfirmation} type="button">
+                Entendi
+              </button>
+            </div>
           </section>
         </div>
       )}
@@ -223,3 +276,9 @@ export default function CartSidebar({
     </>
   );
 }
+
+  function timeToMinutes(time) {
+    if (!time) return -1;
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+  }

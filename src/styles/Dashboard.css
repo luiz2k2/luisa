@@ -33,7 +33,8 @@
   padding: 16px;
   border-radius: 18px;
   border: none;
-  background: #f5ebe3;
+  background: var(--button-gradient);
+  color: #ffffff;
   color: #5e4b43;
   text-align: left;
 }

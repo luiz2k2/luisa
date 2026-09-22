@@ -32,7 +32,6 @@ export default function HomeHero({
 
       <section className="hero">
         <div className="container hero-content">
-          <p className="hero-eyebrow">✧ Beleza premium, sem confusão</p>
           <h2>Transforme sua beleza com nossos serviços premium</h2>
           <p>Cortes, coloração e cuidados com a melhor qualidade e profissionais experientes</p>
 
@@ -73,7 +72,7 @@ export default function HomeHero({
               type="button"
             >
               <Phone size={16} />
-              19 993895612
+              Fale conosco
             </button>
           </div>
 
