@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { getSalonHours } from "../data/salonData";
 
 function getToday() {
   const today = new Date();
@@ -14,8 +16,11 @@ function durationToMinutes(duration) {
 }
 
 function getAvailableTimesByDuration(items, currentItem, products) {
-  const openingMinutes = 9 * 60;
-  const closingMinutes = 18 * 60;
+  const hours = getSalonHours(currentItem.appointment_date);
+  if (!hours) return [];
+
+  const openingMinutes = timeToMinutes(hours.openingTime);
+  const closingMinutes = timeToMinutes(hours.closingTime);
   const getItemDuration = (item) =>
     durationToMinutes(
       item.product_duration ||
@@ -42,7 +47,6 @@ function getAvailableTimesByDuration(items, currentItem, products) {
         currentItem.appointment_date === today &&
         start <= now.getHours() * 60 + now.getMinutes();
 
-        if (start === timeToMinutes(currentItem.appointment_time)) return true;
         if (isPast || end > closingMinutes) return false;
 
       return sameDayItems.every((item) => {
@@ -56,6 +60,204 @@ function getAvailableTimesByDuration(items, currentItem, products) {
       const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
       return `${hours}:${String(minutes % 60).padStart(2, "0")}`;
     });
+}
+
+function dateToValue(date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function AppointmentDateField({ value, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState(null);
+  const triggerRef = useRef(null);
+  const calendarRef = useRef(null);
+  const [displayedMonth, setDisplayedMonth] = useState(() => {
+    const date = value ? new Date(`${value}T12:00:00`) : new Date();
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  });
+  const selectedDate = value ? new Date(`${value}T12:00:00`) : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysInMonth = new Date(
+    displayedMonth.getFullYear(),
+    displayedMonth.getMonth() + 1,
+    0
+  ).getDate();
+  const firstOpenDay = Array.from({ length: daysInMonth }, (_, index) => index + 1)
+    .find((day) => getSalonHours(dateToValue(new Date(
+      displayedMonth.getFullYear(),
+      displayedMonth.getMonth(),
+      day
+    ))));
+  const firstWeekday = firstOpenDay
+    ? new Date(displayedMonth.getFullYear(), displayedMonth.getMonth(), firstOpenDay).getDay() - 2
+    : 0;
+  const dates = [
+    ...Array(Math.max(0, firstWeekday)).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1).flatMap((day) => {
+      const date = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth(), day);
+      if (!getSalonHours(dateToValue(date))) return [];
+      return date < today ? [null] : [day];
+    }),
+  ];
+  const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthLabel = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(displayedMonth);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !triggerRef.current || !calendarRef.current) return undefined;
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current.getBoundingClientRect();
+      const calendar = calendarRef.current.getBoundingClientRect();
+      const left = Math.max(
+        12,
+        Math.min(trigger.left, window.innerWidth - calendar.width - 12)
+      );
+      const maxHeight = Math.max(
+        120,
+        Math.min(calendar.height, trigger.top - 20, window.innerHeight - 24)
+      );
+      const top = Math.max(12, trigger.top - maxHeight - 8);
+
+      setPosition({ top, left, maxHeight });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen, displayedMonth]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (calendarRef.current?.contains(event.target) || triggerRef.current?.contains(event.target)) return;
+      setIsOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const selectDate = (day) => {
+    const date = new Date(
+      displayedMonth.getFullYear(),
+      displayedMonth.getMonth(),
+      day
+    );
+    onChange(dateToValue(date));
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="appointment-date-field">
+      <span className="appointment-field-label">Data</span>
+      <button
+        aria-expanded={isOpen}
+        aria-label={`Data: ${selectedDate ? selectedDate.toLocaleDateString("pt-BR") : "escolher data"}`}
+        className="appointment-date-trigger"
+        ref={triggerRef}
+        onClick={() => setIsOpen((open) => !open)}
+        type="button"
+      >
+        {selectedDate ? selectedDate.toLocaleDateString("pt-BR") : "Escolha uma data"}
+      </button>
+      {isOpen && createPortal(
+        <div
+          aria-label="Escolha uma data"
+          className="appointment-calendar"
+          ref={calendarRef}
+          role="dialog"
+          style={{
+            left: position?.left ?? 0,
+            top: position?.top ?? 0,
+            maxHeight: position?.maxHeight,
+            visibility: position ? "visible" : "hidden",
+          }}
+        >
+          <div className="appointment-calendar-header">
+            <button
+              aria-label="Mês anterior"
+              disabled={displayedMonth <= currentMonth}
+              onClick={() =>
+                setDisplayedMonth(
+                  new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() - 1, 1)
+                )
+              }
+              type="button"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+            <strong>{monthLabel}</strong>
+            <button
+              aria-label="Próximo mês"
+              onClick={() =>
+                setDisplayedMonth(
+                  new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + 1, 1)
+                )
+              }
+              type="button"
+            >
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <div className="appointment-calendar-grid">
+            {["Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => (
+              <span className="appointment-calendar-weekday" key={day}>{day}</span>
+            ))}
+            {dates.map((day, index) => {
+              if (!day) {
+                return <span aria-hidden="true" key={`empty-${index}`} />;
+              }
+
+              const date = new Date(
+                displayedMonth.getFullYear(),
+                displayedMonth.getMonth(),
+                day
+              );
+              const dateValue = dateToValue(date);
+              const isUnavailable = date < today || !getSalonHours(dateValue);
+
+              return (
+                <button
+                  aria-label={date.toLocaleDateString("pt-BR", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                  aria-pressed={dateValue === value}
+                  className={`appointment-calendar-day${dateValue === value ? " selected" : ""}`}
+                  key={dateValue}
+                  onClick={() => selectDate(day)}
+                  type="button"
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 export default function CartSidebar({
@@ -119,18 +321,13 @@ export default function CartSidebar({
                 <h4>{item.product_name}</h4>
                 <p>{formatBRL(item.price)} cada</p>
                 <div className="appointment-fields">
-                  <label>
-                    Data
-                    <input
-                      type="date"
-                      min={getToday()}
-                      value={item.appointment_date || ""}
-                      onChange={(event) => {
-                        onUpdateAppointment(item.__backendId, "appointment_date", event.target.value);
-                        onUpdateAppointment(item.__backendId, "appointment_time", "");
-                      }}
-                    />
-                  </label>
+                  <AppointmentDateField
+                    value={item.appointment_date || ""}
+                    onChange={(date) => {
+                      onUpdateAppointment(item.__backendId, "appointment_date", date);
+                      onUpdateAppointment(item.__backendId, "appointment_time", "");
+                    }}
+                  />
                   <label>
                     Horário
                     <select
@@ -139,7 +336,13 @@ export default function CartSidebar({
                         onUpdateAppointment(item.__backendId, "appointment_time", event.target.value)
                       }
                     >
-                      <option value="">Selecione um horário</option>
+                      <option value="">
+                        {availableTimes.length === 0
+                          ? getSalonHours(item.appointment_date)
+                            ? "Sem horários disponíveis"
+                            : "Fechado nesta data"
+                          : "Selecione um horário"}
+                      </option>
                       {availableTimes.map((time) => (
                         <option key={time} value={time}>{time}</option>
                       ))}

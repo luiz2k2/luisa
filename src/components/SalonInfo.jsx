@@ -1,4 +1,5 @@
 import { MapPin } from "lucide-react";
+import { salonHours } from "../data/salonData";
 
 export default function SalonInfo() {
   return (
@@ -9,9 +10,14 @@ export default function SalonInfo() {
             <h3 id="salon-info-title">Horários de funcionamento</h3>
           </div>
           <div className="hours-list">
-            <div className="hours-row"><span>Segunda a sexta</span><strong>09:00 - 18:00</strong></div>
-            <div className="hours-row"><span>Sábado</span><strong>09:00 - 16:00</strong></div>
+            {salonHours.map((hours) => (
+              <div className="hours-row" key={hours.label}>
+                <span>{hours.label}</span>
+                <strong>{hours.openingTime} - {hours.closingTime}</strong>
+              </div>
+            ))}
             <div className="hours-row"><span>Domingo</span><strong>Fechado</strong></div>
+            <div className="hours-row"><span>Segunda</span><strong>Fechado</strong></div>
           </div>
           <a
             className="address-link"

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { getSalonHours } from "../data/salonData";
 
 function makeLocalId() {
   return `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -11,13 +12,25 @@ function getToday() {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
+function durationToMinutes(duration) {
+  const hours = Number(duration?.match(/(\d+)\s*h/)?.[1] || 0);
+  const minutes = Number(duration?.match(/(\d+)\s*min/)?.[1] || 0);
+  return Math.max(30, hours * 60 + minutes);
+}
+
 function getFirstAvailableDate() {
   const date = new Date();
   date.setDate(date.getDate() + 1);
 
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
+  let dateValue;
+  do {
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    dateValue = `${date.getFullYear()}-${month}-${day}`;
+    if (!getSalonHours(dateValue)) date.setDate(date.getDate() + 1);
+  } while (!getSalonHours(dateValue));
+
+  return dateValue;
 }
 
 export default function useSalonScheduling(products) {
@@ -139,6 +152,34 @@ export default function useSalonScheduling(products) {
 
     if (missingSchedule) {
       showToast("Escolha a data e o horário de cada serviço", "error");
+      return;
+    }
+
+    const hasClosedDate = agendamentos.some(
+      (item) => !getSalonHours(item.appointment_date)
+    );
+
+    if (hasClosedDate) {
+      showToast("O salão atende de terça a sábado. Escolha uma data válida", "error");
+      return;
+    }
+
+    const hasAppointmentOutsideHours = agendamentos.some((item) => {
+      const hours = getSalonHours(item.appointment_date);
+      const product = products.find((entry) => entry.id === item.product_id);
+      const duration = durationToMinutes(item.product_duration || product?.duration);
+      const [startHour, startMinute] = item.appointment_time.split(":").map(Number);
+      const start = startHour * 60 + startMinute;
+      const opening = hours.openingTime.split(":").map(Number);
+      const closing = hours.closingTime.split(":").map(Number);
+      const openingMinutes = opening[0] * 60 + opening[1];
+      const closingMinutes = closing[0] * 60 + closing[1];
+
+      return start < openingMinutes || start + duration > closingMinutes;
+    });
+
+    if (hasAppointmentOutsideHours) {
+      showToast("O serviço precisa terminar até o fechamento. Escolha outro horário", "error");
       return;
     }
 
